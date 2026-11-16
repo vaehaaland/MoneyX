@@ -4,6 +4,8 @@ import { RatesView } from "@/components/rates-view";
 import { TopBar } from "@/components/ui";
 import { getLoan } from "@/lib/loans";
 
+export const instant = false;
+
 export const metadata: Metadata = { title: "Rente" };
 
 export default async function RatesPage({ params }: PageProps<"/loans/[id]/rates">) {

@@ -4,6 +4,8 @@ import { ImportWizard } from "@/components/import-wizard";
 import { TopBar } from "@/components/ui";
 import { getLoan } from "@/lib/loans";
 
+export const instant = false;
+
 export const metadata: Metadata = { title: "Importer" };
 
 export default async function ImportPage({ params }: PageProps<"/loans/[id]/import">) {

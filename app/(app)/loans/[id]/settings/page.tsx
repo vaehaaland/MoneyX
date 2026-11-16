@@ -4,6 +4,8 @@ import { LoanForm } from "@/components/loan-form";
 import { TopBar } from "@/components/ui";
 import { getLoan } from "@/lib/loans";
 
+export const instant = false;
+
 export const metadata: Metadata = { title: "Innstillingar" };
 
 export default async function LoanSettingsPage({ params }: PageProps<"/loans/[id]/settings">) {

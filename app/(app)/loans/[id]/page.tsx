@@ -3,6 +3,8 @@ import { LoanView } from "@/components/loan-view";
 import { IconLink, TopBar } from "@/components/ui";
 import { getLoan } from "@/lib/loans";
 
+export const instant = false;
+
 export default async function LoanPage({ params }: PageProps<"/loans/[id]">) {
   const { id } = await params;
   const detail = await getLoan(id);

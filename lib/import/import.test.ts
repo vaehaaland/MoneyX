@@ -146,4 +146,29 @@ describe("guessMapping and mapRows", () => {
       ["2023-02-10", "repayment", 20000, null],
     ]);
   });
+
+  it("reads a Dato / Beskrivelse / Ut / Inn sheet with dd/mm/yy dates", () => {
+    const table = parseDelimited(
+      [
+        "Dato\tBeskrivelse\tUt\tInn",
+        "20/05/21\tLån til bil\t150 000\t",
+        "28/04/22\tHjulstilling og 2x nye dekk hos Møller Bil Stavanger\t5 800\t",
+        "01/06/22\tNetflix Premium\t\t159",
+        "21/08/22\tKjøp Audi\t-61 729\t",
+        "04/12/22\tTV2 Play Total\t\t359",
+      ].join("\n"),
+    );
+    const mapping = guessMapping(table);
+    expect(mapping).toMatchObject({ hasHeader: true, date: 0, note: 1, amount: null, disbursed: 2, repaid: 3 });
+    const { rows, skipped } = mapRows(table, mapping);
+    expect(skipped).toEqual([]);
+    expect(rows.map((r) => [r.date, r.kind, r.amountOre])).toEqual([
+      ["2021-05-20", "disbursement", 15000000],
+      ["2022-04-28", "disbursement", 580000],
+      ["2022-06-01", "repayment", 15900],
+      ["2022-08-21", "disbursement", 6172900],
+      ["2022-12-04", "repayment", 35900],
+    ]);
+    expect(rows[1].note).toBe("Hjulstilling og 2x nye dekk hos Møller Bil Stavanger");
+  });
 });

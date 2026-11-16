@@ -4,6 +4,8 @@ import { LoanForm } from "@/components/loan-form";
 import { TopBar } from "@/components/ui";
 import { todayIso } from "@/lib/format";
 
+export const instant = false;
+
 export const metadata: Metadata = { title: "Nytt lån" };
 
 export default async function NewLoanPage() {

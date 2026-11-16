@@ -5,6 +5,8 @@ import { formatKr, formatRate } from "@/lib/format";
 import { balanceLabel } from "@/lib/labels";
 import { listLoans } from "@/lib/loans";
 
+export const instant = false;
+
 export default async function LoansPage() {
   const loans = await listLoans();
 

@@ -4,6 +4,8 @@ import { Icon } from "@/components/icon";
 import { buttonClass, Card, TopBar } from "@/components/ui";
 import { createClient } from "@/lib/supabase/server";
 
+export const instant = false;
+
 export const metadata: Metadata = { title: "Konto" };
 
 export default async function AccountPage() {

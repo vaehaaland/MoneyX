@@ -1,9 +1,13 @@
 import { createServerClient } from "@supabase/ssr";
 import { cookies } from "next/headers";
+import { connection } from "next/server";
 import type { Database } from "./database.types";
 
 /** Supabase client for Server Components, Server Actions and Route Handlers. */
 export async function createClient() {
+  // Verifying the session reads the clock, which Next.js only allows once the
+  // render is tied to a request.
+  await connection();
   const cookieStore = await cookies();
   return createServerClient<Database>(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
