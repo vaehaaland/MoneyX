@@ -1,4 +1,4 @@
-# MoneyX – spesifikasjon v0.1
+# MoneyX – spesifikasjon v0.2
 
 Personleg økonomi-app for mobil og nettlesar. Første mål: få eit privat lån ut av Excel og inn i noko
 som held saldo, rente og nedbetalingsplan oppdatert av seg sjølv. Deretter: import av banktransaksjonar
@@ -13,6 +13,10 @@ for forbruksanalyse, og ein Claude-chat som kan lese og jobbe på dei same dataa
 | Brukarar | Eigar + motparten i lånet (delt tilgang per lån) |
 | Stack | Next.js (App Router) + Supabase (Postgres, Auth, RLS) + Vercel |
 | Form | Responsiv, installerbar PWA – ingen app-butikk |
+| Rente i dag | 0 % – nye lån startar rentefritt, sats kan leggjast til seinare utan ombygging |
+| Motparten | Skrivetilgang: kan registrere transaksjonar sjølv |
+| Innlogging | Magisk lenke på e-post (ingen passord) |
+| Rekkjefølgje | Chat med leseverktøy kjem rett etter M1 |
 
 ## 2. Prinsipp
 
@@ -23,6 +27,8 @@ for forbruksanalyse, og ein Claude-chat som kan lese og jobbe på dei same dataa
 3. **Pengar er heiltal.** Beløp blir lagra i øre (`bigint`), aldri flyttal.
 4. **Chatten reknar ikkje sjølv.** Claude hentar tal via verktøy som kallar reknemotoren, og
    endringar i data krev stadfesting i UI.
+5. **Appen skal ikkje bli gløymd.** Excel-arket fall ut av bruk fordi ingenting minte om det.
+   Appen tek initiativet: påminningar, eitt-trykks stadfesting og varsel til begge partar.
 
 ## 3. Lån
 
@@ -52,7 +58,8 @@ hendingar.
 - Dagleg rente: `saldo × årssats / 365`, akkumulert med full presisjon og avrunda til øre ved
   kapitalisering.
 - Kapitalisering etter innstillinga på lånet (månadleg, årleg eller aldri – då står renta som eigen
-  post ved sida av hovudstolen).
+  post ved sida av hovudstolen). Standard er `none` og 0 %, så eit rentefritt lån er rein saldo
+  inn og ut. Innstillinga kan endrast seinare og gjeld frå ein vald dato.
 - Innbetalingar dekker påløpt rente først, deretter hovudstol.
 - Tilbakedaterte transaksjonar eller renteendringar reknar heile historikken på nytt.
 - Dekka av einingstestar, inkludert ein test som køyrer Excel-historikken og samanliknar saldoen.
@@ -67,6 +74,21 @@ hendingar.
 - **Deling:** inviter motparten på e-post, vel lese- eller skrivetilgang.
 - **Import frå Excel:** lim inn eller last opp eksisterande reknark, map kolonnar (dato, beløp,
   tekst), førehandsvis saldo før lagring.
+
+### 3.4 Påminningar og låg friksjon
+
+```
+notification_prefs  user_id, loan_id, channel (push | email), planned_payment, new_activity,
+                    monthly_summary
+```
+
+- **Planlagd betaling:** på forfallsdagen kjem eit varsel – «Betalte du 4 000 kr i dag?» – med
+  *Ja* (registrerer transaksjonen med eitt trykk), *Anna beløp* og *Ikkje enno* (spør att om 3 dagar).
+- **Ny aktivitet:** når éin part registrerer noko, får den andre varsel. Begge held dermed lånet
+  oppdatert, og ingen blir overraska over saldoen.
+- **Månadsoppsummering:** saldo, betalt denne månaden og status mot plan, på e-post den 1.
+- **Stille for lenge:** ingen transaksjonar på 45 dagar og ingen aktiv plan → eitt vennleg dytt.
+- Kanalar: web-push der PWA-en er installert, e-post som reserve. Alt kan slåast av per lån.
 
 ## 4. Nedbetalingsplan
 
@@ -141,14 +163,12 @@ import_profiles     id, owner_id, name, mapping_json           -- gjenbruk per b
 | # | Leveranse | Resultat |
 |---|---|---|
 | M1 | Skjelett, innlogging, låneskjema, reknemotor m/testar, oversikt, tidslinje, ny transaksjon, rentesatsar, Excel-import av lånehistorikk | **Lånet er ute av Excel** |
-| M2 | Planar, simulering, samanlikning, avvik, utgifter framover | Dynamisk nedbetalingsplan |
-| M3 | Invitasjon og roller for motparten | Delt lån |
-| M4 | Kontoar, CSV/XLSX-import, kategoriar, reglar, analyse | Forbruksanalyse |
-| M5 | Chat med les-verktøy, deretter skriv-verktøy med stadfesting | Claude jobbar på dataa |
+| M2 | Chat med leseverktøy (lån) | Spør Claude om lånet |
+| M3 | Invitasjon av motparten med skrivetilgang, varsel om ny aktivitet | Delt lån |
+| M4 | Planar, simulering, samanlikning, avvik, påminning med eitt-trykks stadfesting, månadsoppsummering | Dynamisk plan som minner deg på |
+| M5 | Kontoar, CSV/XLSX-import, kategoriar, reglar, analyse | Forbruksanalyse |
+| M6 | Chat: forbruksverktøy og skriveverktøy med stadfesting | Claude jobbar på dataa |
 
 ## 9. Opne spørsmål
 
-1. Kapitalisering: blir renta lagd til hovudstolen månadleg, årleg, eller står ho som eigen post?
-2. Skal motparten kunne registrere transaksjonar, eller berre sjå?
-3. Skal M5 (chat med les-verktøy) flyttast fram til rett etter M1?
-4. Innlogging: magisk lenke på e-post, eller Google?
+1. Skal lånet ha rente framover, eller held det fram rentefritt? (Kan avgjerast når som helst.)
