@@ -88,7 +88,8 @@ function TimelineRow({ row, onEdit }: { row: Row; onEdit: (tx: LoanTransactionRo
 }
 
 export function LoanView({ detail }: { detail: LoanDetail }) {
-  const { loan, ledger, transactions, upcoming, today } = detail;
+  const { loan, ledger, transactions, upcoming, recurring, today } = detail;
+  const activeRecurring = recurring.filter((rule) => rule.endDate === null || rule.nextDue <= rule.endDate);
   const [sheet, setSheet] = useState<{ open: boolean; editing: LoanTransactionRow | null }>({
     open: false,
     editing: null,
@@ -109,6 +110,7 @@ export function LoanView({ detail }: { detail: LoanDetail }) {
         const split = `${formatKr(entry.interestPartOre, { trimZeros: true })} renter`;
         detailText = detailText ? `${detailText} · ${split}` : split;
       }
+      if (transaction?.recurring) detailText = detailText ? `Fast · ${detailText}` : "Fast betaling";
       return {
         key: entry.transactionId ?? `${entry.type}-${entry.date}-${index}`,
         date: entry.date,
@@ -174,6 +176,27 @@ export function LoanView({ detail }: { detail: LoanDetail }) {
           <BalanceChart series={ledger.series} />
         </Card>
       )}
+
+      <Link
+        href={`/loans/${loan.id}/recurring`}
+        className="state-layer flex items-center gap-4 rounded-[28px] bg-surface-low px-5 py-4"
+      >
+        <span className="flex size-10 shrink-0 items-center justify-center rounded-full bg-secondary-container text-on-secondary-container">
+          <Icon name="repeat" className="size-5" />
+        </span>
+        <span className="min-w-0 flex-1">
+          <span className="block">Faste betalingar</span>
+          <span className="block truncate text-sm text-on-surface-variant">
+            {activeRecurring.length === 0
+              ? "Få faste innbetalingar ført automatisk"
+              : activeRecurring
+                  .map((rule) => `${formatKr(rule.amountOre, { trimZeros: true })} den ${rule.dayOfMonth}.`)
+                  .join(" · ") +
+                ` · neste ${formatDate([...activeRecurring].sort((a, b) => a.nextDue.localeCompare(b.nextDue))[0].nextDue)}`}
+          </span>
+        </span>
+        <Icon name="chevron" className="size-6 text-on-surface-variant" />
+      </Link>
 
       {empty ? (
         <Card className="space-y-4 py-10 text-center">

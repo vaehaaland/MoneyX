@@ -246,6 +246,65 @@ export async function deleteRate(loanId: string, id: string): Promise<ActionResu
   return { ok: true };
 }
 
+export interface RecurringInput {
+  kind: "repayment" | "disbursement";
+  amountOre: number;
+  dayOfMonth: number;
+  startDate: string;
+  endDate: string | null;
+  note: string;
+}
+
+/** Adds a recurring payment and immediately posts any occurrences already due. */
+export async function createRecurring(loanId: string, input: RecurringInput): Promise<ActionResult> {
+  if (!UUID.test(loanId)) return fail("Ukjent lån.");
+  if (input.kind !== "repayment" && input.kind !== "disbursement") return fail("Vel ein type.");
+  const problem = checkAmount(input.amountOre, input.kind);
+  if (problem) return fail(problem);
+  if (!Number.isInteger(input.dayOfMonth) || input.dayOfMonth < 1 || input.dayOfMonth > 31) {
+    return fail("Vel ein dag mellom 1 og 31.");
+  }
+  if (!isDate(input.startDate) || input.startDate < "2000-01-01") return fail("Vel ein gyldig startdato.");
+  if (input.endDate !== null && (!isDate(input.endDate) || input.endDate < input.startDate)) {
+    return fail("Sluttdatoen må vere etter startdatoen.");
+  }
+
+  const supabase = await createClient();
+  const { error } = await supabase.from("loan_recurring_payments").insert({
+    loan_id: loanId,
+    kind: input.kind,
+    amount_ore: input.amountOre,
+    day_of_month: input.dayOfMonth,
+    start_date: input.startDate,
+    end_date: input.endDate,
+    note: cleanText(input.note, 500),
+    // Replaced by a database trigger; the column has no default.
+    next_due: input.startDate,
+  });
+  if (error) return dbError(error.message);
+
+  const posted = await supabase.rpc("post_due_recurring_payments", { p_loan_id: loanId });
+  if (posted.error) return dbError(posted.error.message);
+  refresh();
+  return { ok: true };
+}
+
+/** Stops a recurring payment. Transactions it already posted are kept. */
+export async function deleteRecurring(loanId: string, id: string): Promise<ActionResult> {
+  if (!UUID.test(loanId) || !UUID.test(id)) return fail("Ukjend fast betaling.");
+  const supabase = await createClient();
+  const { data, error } = await supabase
+    .from("loan_recurring_payments")
+    .delete()
+    .eq("id", id)
+    .eq("loan_id", loanId)
+    .select("id");
+  if (error) return dbError(error.message);
+  if (data.length === 0) return fail("Du har ikkje tilgang til å stoppe denne.");
+  refresh();
+  return { ok: true };
+}
+
 export async function signOut(): Promise<void> {
   const supabase = await createClient();
   await supabase.auth.signOut();

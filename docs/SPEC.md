@@ -1,4 +1,4 @@
-# MoneyX – spesifikasjon v0.3
+# MoneyX – spesifikasjon v0.4
 
 Personleg økonomi-app for mobil og nettlesar. Første mål: få eit privat lån ut av Excel og inn i noko
 som held saldo, rente og nedbetalingsplan oppdatert av seg sjølv. Deretter: import av banktransaksjonar
@@ -89,6 +89,25 @@ notification_prefs  user_id, loan_id, channel (push | email), planned_payment, n
 - **Månadsoppsummering:** saldo, betalt denne månaden og status mot plan, på e-post den 1.
 - **Stille for lenge:** ingen transaksjonar på 45 dagar og ingen aktiv plan → eitt vennleg dytt.
 - Kanalar: web-push der PWA-en er installert, e-post som reserve. Alt kan slåast av per lån.
+
+### 3.5 Faste betalingar (bygd)
+
+```
+loan_recurring_payments  id, loan_id, kind (repayment | disbursement), amount_ore,
+                         day_of_month, start_date, end_date, note, next_due
+loan_transactions        + recurring_id
+```
+
+- Ein regel per fast månadleg beløp. Dag 29–31 fell på siste dag i kortare månader.
+- Ein dagleg jobb i databasen (`pg_cron`, 03:15 UTC) fører kvar forfalne betaling som ein vanleg
+  transaksjon, merka «Fast». Reknemotoren kjenner ikkje til reglane.
+- Startdato tilbake i tid fører alle forfalne betalingar med ein gong.
+- Kvar regel fører maksimalt éin transaksjon per dato, og ei betaling som blir sletta manuelt kjem
+  ikkje tilbake. Å stoppe ein regel fjernar ikkje det som alt er ført.
+- Betalingane blir førte utan stadfesting. Påminninga i 3.4 («Betalte du … i dag?») er alternativet
+  for betalingar som ikkje alltid går som planlagt.
+- Ikkje bygd: endring av ein eksisterande regel (stopp og lag ny), andre intervall enn månadleg, og
+  automatisk stopp når lånet er nedbetalt.
 
 ## 4. Nedbetalingsplan
 

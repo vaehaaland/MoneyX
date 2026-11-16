@@ -20,6 +20,20 @@ export interface LoanTransactionRow {
   amountOre: number;
   kind: TransactionKind;
   note: string | null;
+  /** Posted automatically by a recurring payment. */
+  recurring: boolean;
+}
+
+export interface RecurringPaymentRow {
+  id: string;
+  kind: "repayment" | "disbursement";
+  amountOre: number;
+  dayOfMonth: number;
+  startDate: string;
+  endDate: string | null;
+  note: string | null;
+  /** Next date it will be posted; past `endDate` when the rule has finished. */
+  nextDue: string;
 }
 
 export interface LoanRateRow {
@@ -32,6 +46,7 @@ export interface LoanDetail {
   loan: Loan;
   transactions: LoanTransactionRow[];
   rates: LoanRateRow[];
+  recurring: RecurringPaymentRow[];
   ledger: LedgerResult;
   /** Transactions dated after today: listed, but not part of the balance. */
   upcoming: LoanTransactionRow[];
@@ -39,7 +54,9 @@ export interface LoanDetail {
 }
 
 const LOAN_COLUMNS = "id, owner_id, name, counterparty_name, direction, start_date, capitalization, archived_at";
-const TX_COLUMNS = "id, loan_id, date, amount_ore, kind, note";
+const TX_COLUMNS = "id, loan_id, date, amount_ore, kind, note, recurring_id";
+const RECURRING_COLUMNS =
+  "id, loan_id, kind, amount_ore, day_of_month, start_date, end_date, note, next_due";
 const RATE_COLUMNS = "id, loan_id, valid_from, annual_rate_bp";
 
 type LoanRecord = {
@@ -66,12 +83,40 @@ function toLoan(row: LoanRecord, userId: string | null): Loan {
   };
 }
 
-const toTx = (t: { id: string; date: string; amount_ore: number; kind: string; note: string | null }): LoanTransactionRow => ({
+const toTx = (t: {
+  id: string;
+  date: string;
+  amount_ore: number;
+  kind: string;
+  note: string | null;
+  recurring_id: string | null;
+}): LoanTransactionRow => ({
   id: t.id,
   date: t.date,
   amountOre: t.amount_ore,
   kind: t.kind as TransactionKind,
   note: t.note,
+  recurring: t.recurring_id !== null,
+});
+
+const toRecurring = (r: {
+  id: string;
+  kind: string;
+  amount_ore: number;
+  day_of_month: number;
+  start_date: string;
+  end_date: string | null;
+  note: string | null;
+  next_due: string;
+}): RecurringPaymentRow => ({
+  id: r.id,
+  kind: r.kind as RecurringPaymentRow["kind"],
+  amountOre: r.amount_ore,
+  dayOfMonth: r.day_of_month,
+  startDate: r.start_date,
+  endDate: r.end_date,
+  note: r.note,
+  nextDue: r.next_due,
 });
 
 const toRate = (r: { id: string; valid_from: string; annual_rate_bp: number }): LoanRateRow => ({
@@ -84,6 +129,7 @@ function buildDetail(
   loan: Loan,
   transactions: LoanTransactionRow[],
   rates: LoanRateRow[],
+  recurring: RecurringPaymentRow[],
   today: string,
 ): LoanDetail {
   const ledger = computeLedger({
@@ -92,7 +138,15 @@ function buildDetail(
     capitalization: loan.capitalization,
     until: today,
   });
-  return { loan, transactions, rates, ledger, upcoming: transactions.filter((t) => t.date > today), today };
+  return {
+    loan,
+    transactions,
+    rates,
+    recurring,
+    ledger,
+    upcoming: transactions.filter((t) => t.date > today),
+    today,
+  };
 }
 
 /** Every loan the signed-in user can see, with its current position. */
@@ -101,12 +155,13 @@ export async function listLoans(): Promise<LoanDetail[]> {
   const { data: claims } = await supabase.auth.getClaims();
   const userId = claims?.claims?.sub ?? null;
 
-  const [loans, transactions, rates] = await Promise.all([
+  const [loans, transactions, rates, recurring] = await Promise.all([
     supabase.from("loans").select(LOAN_COLUMNS).order("created_at"),
     supabase.from("loan_transactions").select(TX_COLUMNS).order("date").order("created_at"),
     supabase.from("loan_rates").select(RATE_COLUMNS).order("valid_from"),
+    supabase.from("loan_recurring_payments").select(RECURRING_COLUMNS).order("created_at"),
   ]);
-  const error = loans.error ?? transactions.error ?? rates.error;
+  const error = loans.error ?? transactions.error ?? rates.error ?? recurring.error;
   if (error) throw new Error(error.message);
 
   const today = todayIso();
@@ -115,6 +170,7 @@ export async function listLoans(): Promise<LoanDetail[]> {
       toLoan(row, userId),
       (transactions.data ?? []).filter((t) => t.loan_id === row.id).map(toTx),
       (rates.data ?? []).filter((r) => r.loan_id === row.id).map(toRate),
+      (recurring.data ?? []).filter((r) => r.loan_id === row.id).map(toRecurring),
       today,
     ),
   );
@@ -127,12 +183,13 @@ export async function getLoan(id: string): Promise<LoanDetail | null> {
   const { data: claims } = await supabase.auth.getClaims();
   const userId = claims?.claims?.sub ?? null;
 
-  const [loan, transactions, rates] = await Promise.all([
+  const [loan, transactions, rates, recurring] = await Promise.all([
     supabase.from("loans").select(LOAN_COLUMNS).eq("id", id).maybeSingle(),
     supabase.from("loan_transactions").select(TX_COLUMNS).eq("loan_id", id).order("date").order("created_at"),
     supabase.from("loan_rates").select(RATE_COLUMNS).eq("loan_id", id).order("valid_from"),
+    supabase.from("loan_recurring_payments").select(RECURRING_COLUMNS).eq("loan_id", id).order("created_at"),
   ]);
-  const error = loan.error ?? transactions.error ?? rates.error;
+  const error = loan.error ?? transactions.error ?? rates.error ?? recurring.error;
   if (error) throw new Error(error.message);
   if (!loan.data) return null;
 
@@ -140,6 +197,7 @@ export async function getLoan(id: string): Promise<LoanDetail | null> {
     toLoan(loan.data, userId),
     (transactions.data ?? []).map(toTx),
     (rates.data ?? []).map(toRate),
+    (recurring.data ?? []).map(toRecurring),
     todayIso(),
   );
 }

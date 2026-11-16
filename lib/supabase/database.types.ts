@@ -75,6 +75,56 @@ export type Database = {
           },
         ]
       }
+      loan_recurring_payments: {
+        Row: {
+          amount_ore: number
+          created_at: string
+          created_by: string | null
+          day_of_month: number
+          end_date: string | null
+          id: string
+          kind: string
+          loan_id: string
+          next_due: string
+          note: string | null
+          start_date: string
+        }
+        Insert: {
+          amount_ore: number
+          created_at?: string
+          created_by?: string | null
+          day_of_month: number
+          end_date?: string | null
+          id?: string
+          kind?: string
+          loan_id: string
+          next_due: string
+          note?: string | null
+          start_date: string
+        }
+        Update: {
+          amount_ore?: number
+          created_at?: string
+          created_by?: string | null
+          day_of_month?: number
+          end_date?: string | null
+          id?: string
+          kind?: string
+          loan_id?: string
+          next_due?: string
+          note?: string | null
+          start_date?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "loan_recurring_payments_loan_id_fkey"
+            columns: ["loan_id"]
+            isOneToOne: false
+            referencedRelation: "loans"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       loan_transactions: {
         Row: {
           amount_ore: number
@@ -85,6 +135,7 @@ export type Database = {
           kind: string
           loan_id: string
           note: string | null
+          recurring_id: string | null
         }
         Insert: {
           amount_ore: number
@@ -95,6 +146,7 @@ export type Database = {
           kind: string
           loan_id: string
           note?: string | null
+          recurring_id?: string | null
         }
         Update: {
           amount_ore?: number
@@ -105,6 +157,7 @@ export type Database = {
           kind?: string
           loan_id?: string
           note?: string | null
+          recurring_id?: string | null
         }
         Relationships: [
           {
@@ -112,6 +165,13 @@ export type Database = {
             columns: ["loan_id"]
             isOneToOne: false
             referencedRelation: "loans"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "loan_transactions_recurring_id_fkey"
+            columns: ["recurring_id"]
+            isOneToOne: false
+            referencedRelation: "loan_recurring_payments"
             referencedColumns: ["id"]
           },
         ]
@@ -160,7 +220,10 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
-      [_ in never]: never
+      post_due_recurring_payments: {
+        Args: { p_loan_id?: string }
+        Returns: number
+      }
     }
     Enums: {
       [_ in never]: never
