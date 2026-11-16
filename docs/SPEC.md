@@ -1,4 +1,4 @@
-# MoneyX – spesifikasjon v0.2
+# MoneyX – spesifikasjon v0.3
 
 Personleg økonomi-app for mobil og nettlesar. Første mål: få eit privat lån ut av Excel og inn i noko
 som held saldo, rente og nedbetalingsplan oppdatert av seg sjølv. Deretter: import av banktransaksjonar
@@ -15,7 +15,7 @@ for forbruksanalyse, og ein Claude-chat som kan lese og jobbe på dei same dataa
 | Form | Responsiv, installerbar PWA – ingen app-butikk |
 | Rente i dag | 0 % – nye lån startar rentefritt, sats kan leggjast til seinare utan ombygging |
 | Motparten | Skrivetilgang: kan registrere transaksjonar sjølv |
-| Innlogging | Magisk lenke på e-post (ingen passord) |
+| Innlogging | Magisk lenke på e-post (ingen passord). Kode i e-posten krev eigen SMTP, sjå §9 |
 | Rekkjefølgje | Chat med leseverktøy kjem rett etter M1 |
 
 ## 2. Prinsipp
@@ -35,9 +35,9 @@ for forbruksanalyse, og ein Claude-chat som kan lese og jobbe på dei same dataa
 ### 3.1 Datamodell
 
 ```
-loans               id, owner_id, name, direction (borrowed | lent), currency,
-                    start_date, capitalization (monthly | yearly | none),
-                    day_count (act_365), archived_at
+loans               id, owner_id, name, counterparty_name, direction (borrowed | lent),
+                    currency, start_date, capitalization (monthly | yearly | none),
+                    archived_at
 loan_rates          id, loan_id, valid_from, annual_rate_bp        -- basispunkt, 550 = 5,50 %
 loan_transactions   id, loan_id, date, amount_ore, kind, note, created_by
                     kind: disbursement | repayment | fee | adjustment
@@ -162,7 +162,7 @@ import_profiles     id, owner_id, name, mapping_json           -- gjenbruk per b
 
 | # | Leveranse | Resultat |
 |---|---|---|
-| M1 | Skjelett, innlogging, låneskjema, reknemotor m/testar, oversikt, tidslinje, ny transaksjon, rentesatsar, Excel-import av lånehistorikk | **Lånet er ute av Excel** |
+| M1 ✅ | Skjelett, innlogging, låneskjema, reknemotor m/testar, oversikt, tidslinje, ny transaksjon, rentesatsar, Excel-import av lånehistorikk | **Lånet er ute av Excel** |
 | M2 | Chat med leseverktøy (lån) | Spør Claude om lånet |
 | M3 | Invitasjon av motparten med skrivetilgang, varsel om ny aktivitet | Delt lån |
 | M4 | Planar, simulering, samanlikning, avvik, påminning med eitt-trykks stadfesting, månadsoppsummering | Dynamisk plan som minner deg på |
@@ -172,3 +172,14 @@ import_profiles     id, owner_id, name, mapping_json           -- gjenbruk per b
 ## 9. Opne spørsmål
 
 1. Skal lånet ha rente framover, eller held det fram rentefritt? (Kan avgjerast når som helst.)
+2. E-post: Supabase sin innebygde utsending leverer berre til medlemmer av organisasjonen, har
+   streng rategrense og tillèt ikkje eigne malar. Før motparten kan inviterast (M3) trengst eigen
+   SMTP (t.d. Resend). Då kan òg malen i `supabase/templates/sign-in.html` takast i bruk, slik at
+   e-posten har ein kode som fungerer i ein installert app på iPhone.
+3. Hosting: Vercel-prosjekt og produksjons-URL (må leggjast inn som Site URL i Supabase Auth).
+
+## 10. Avvik frå planen i M1
+
+- UI-komponentane er handskrivne med Tailwind og Material 3-tokens i staden for shadcn/ui, og
+  overgangar er rein CSS i staden for Motion. Recharts er brukt til grafen.
+- Dagteljing er alltid faktiske dagar / 365, så `day_count`-kolonnen er ikkje med.
