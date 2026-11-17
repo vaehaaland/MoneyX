@@ -6,9 +6,9 @@
  */
 import { formatRate } from "../format";
 import { balanceLabel } from "../labels";
-import { computeLedger, fromDayNumber, toDayNumber, type LedgerEntryType, type LoanTransaction } from "../loan-engine";
+import type { LedgerEntryType, LoanTransaction } from "../loan-engine";
 import type { LoanDetail } from "../loans";
-import { dueDateInMonth, dueDatesBetween } from "../recurring";
+import { addYears, firstDueAfter, MAX_YEARS, monthlyForPayoff, monthlyRepayments, plannedTransactions, project } from "../projection";
 
 const kr = (ore: number) => ore / 100;
 const toOre = (kroner: number) => Math.round(kroner * 100);
@@ -63,6 +63,26 @@ export function loanSummary(detail: LoanDetail) {
       next_due: r.endDate && r.nextDue > r.endDate ? null : r.nextDue,
       note: r.note,
     })),
+    // The plan the app follows up on, if the user has chosen one.
+    followed_plan: detail.activePlan
+      ? {
+          name: detail.activePlan.plan.name,
+          monthly_payment_kr: kr(detail.activePlan.plan.monthlyOre),
+          day_of_month: detail.activePlan.plan.dayOfMonth,
+          start_date: detail.activePlan.plan.startDate,
+          expected_so_far_kr: kr(detail.activePlan.status.expectedOre),
+          repaid_so_far_kr: kr(detail.activePlan.status.paidOre),
+          // Positive: ahead of plan. Negative: behind.
+          ahead_of_plan_kr: kr(detail.activePlan.status.aheadOre),
+          unregistered_payment: detail.activePlan.status.pending
+            ? { due_date: detail.activePlan.status.pending.dueDate, amount_kr: kr(detail.activePlan.status.pending.amountOre) }
+            : null,
+          next_payment: detail.activePlan.status.next
+            ? { date: detail.activePlan.status.next.date, amount_kr: kr(detail.activePlan.status.next.amountOre) }
+            : null,
+        }
+      : null,
+    other_plans: detail.plans.filter((plan) => !plan.isActive).map((plan) => ({ name: plan.name, monthly_payment_kr: kr(plan.monthlyOre) })),
     upcoming_transactions: upcoming.map((t) => ({
       date: t.date,
       kind: t.kind,
@@ -142,87 +162,6 @@ export interface SimulationOptions {
   extraPayments?: { date: string; amountKr: number }[];
 }
 
-const MAX_YEARS = 60;
-
-function addYears(date: string, years: number): string {
-  return `${Number(date.slice(0, 4)) + years}${date.slice(4)}`;
-}
-
-/** Payments the loan already has planned from today: future-dated rows and recurring rules. */
-function plannedTransactions(detail: LoanDetail, horizon: string, includeRecurringRepayments: boolean) {
-  const planned: LoanTransaction[] = detail.upcoming.map((t) => ({ date: t.date, amountOre: t.amountOre, kind: t.kind }));
-  for (const rule of detail.recurring) {
-    if (rule.kind === "repayment" && !includeRecurringRepayments) continue;
-    const from = rule.nextDue > detail.today ? rule.nextDue : detail.today;
-    const to = rule.endDate && rule.endDate < horizon ? rule.endDate : horizon;
-    for (const date of dueDatesBetween(from, to, rule.dayOfMonth)) {
-      planned.push({ date, amountOre: rule.amountOre, kind: rule.kind });
-    }
-  }
-  return planned;
-}
-
-interface Projection {
-  paidOff: boolean;
-  payoffDate: string | null;
-  payments: number;
-  totalPaidOre: number;
-  lastPaymentOre: number | null;
-  endBalanceOre: number;
-  checkpoints: { date: string; balanceOre: number }[];
-}
-
-/** Runs the engine forward from today with the given future transactions. */
-function project(detail: LoanDetail, future: LoanTransaction[], rateBp: number | undefined, horizon: string): Projection {
-  const past = detail.transactions.filter((t) => t.date <= detail.today);
-  const rates =
-    rateBp === undefined
-      ? detail.rates
-      : [...detail.rates.filter((r) => r.validFrom < detail.today), { validFrom: detail.today, annualRateBp: rateBp }];
-  const sorted = [...future].sort((a, b) => a.date.localeCompare(b.date));
-  const ledger = computeLedger({
-    transactions: [...past, ...sorted],
-    rates,
-    capitalization: detail.loan.capitalization,
-    until: fromDayNumber(toDayNumber(horizon) + 1),
-  });
-
-  const result: Projection = {
-    paidOff: false,
-    payoffDate: null,
-    payments: 0,
-    totalPaidOre: 0,
-    lastPaymentOre: null,
-    endBalanceOre: ledger.balanceOre,
-    checkpoints: [],
-  };
-  let year = detail.today.slice(0, 4);
-  let previous = detail.ledger.balanceOre;
-  for (const entry of ledger.entries) {
-    if (entry.date <= detail.today) continue;
-    // One checkpoint per calendar year: the balance going into the new year.
-    if (entry.date.slice(0, 4) !== year) {
-      year = entry.date.slice(0, 4);
-      result.checkpoints.push({ date: `${year}-01-01`, balanceOre: previous });
-    }
-    previous = entry.balanceAfterOre;
-    if (entry.type !== "repayment") continue;
-    result.payments += 1;
-    if (entry.balanceAfterOre <= 0) {
-      // The final payment only needs to cover what is left.
-      const last = -entry.deltaOre + entry.balanceAfterOre;
-      result.totalPaidOre += last;
-      result.lastPaymentOre = last;
-      result.paidOff = true;
-      result.payoffDate = entry.date;
-      result.endBalanceOre = 0;
-      break;
-    }
-    result.totalPaidOre += -entry.deltaOre;
-  }
-  return result;
-}
-
 /** Forward simulation for `simulate_repayment`. Never touches stored data. */
 export function simulateRepayment(detail: LoanDetail, options: SimulationOptions = {}) {
   const { today } = detail;
@@ -236,39 +175,14 @@ export function simulateRepayment(detail: LoanDetail, options: SimulationOptions
     .filter((p) => p.date > today && p.amountKr > 0)
     .map((p) => ({ date: p.date, amountOre: toOre(p.amountKr), kind: "repayment" }));
 
-  // Monthly payments start on the first due date after today.
-  const monthly = (amountOre: number, until: string): LoanTransaction[] =>
-    amountOre <= 0
-      ? []
-      : dueDatesBetween(today, until, day)
-          .filter((date) => date > today)
-          .map((date) => ({ date, amountOre, kind: "repayment" }));
-
   let monthlyOre: number | null = options.monthlyPaymentKr === undefined ? null : toOre(options.monthlyPaymentKr);
   const customMonthly = monthlyOre !== null || options.payoffBy !== undefined;
   const base = [...plannedTransactions(detail, horizon, !customMonthly), ...extras];
-  let unreachable = false;
+  // Smallest whole-krone monthly amount that clears the loan by the date.
+  if (options.payoffBy !== undefined) monthlyOre = monthlyForPayoff(detail, base, today, options.payoffBy, day, rateBp);
+  const unreachable = options.payoffBy !== undefined && monthlyOre === null;
 
-  if (options.payoffBy !== undefined) {
-    // Smallest whole-krone monthly amount that clears the loan by the date.
-    const deadline = options.payoffBy;
-    const clears = (ore: number) => {
-      const run = project(detail, [...base, ...monthly(ore, deadline)], rateBp, deadline);
-      return run.paidOff;
-    };
-    let high = Math.ceil(balanceOre / 100) * 100;
-    for (let i = 0; i < 12 && !clears(high); i++) high *= 2;
-    if (!clears(high)) unreachable = true;
-    let low = 0;
-    while (!unreachable && high - low > 100) {
-      const mid = Math.floor((low + high) / 200) * 100;
-      if (clears(mid)) high = mid;
-      else low = mid;
-    }
-    monthlyOre = unreachable ? null : high;
-  }
-
-  const future = [...base, ...(monthlyOre !== null ? monthly(monthlyOre, horizon) : [])];
+  const future = [...base, ...(monthlyOre !== null ? monthlyRepayments(today, horizon, day, monthlyOre) : [])];
   const run = project(detail, future, rateBp, horizon);
   // Whatever is repaid beyond today's balance and new money out is the cost.
   const addedOre = base
@@ -290,7 +204,7 @@ export function simulateRepayment(detail: LoanDetail, options: SimulationOptions
       ? {
           payoff_by: options.payoffBy,
           required_monthly_payment_kr: monthlyOre === null ? null : kr(monthlyOre),
-          first_payment_date: dueDateInMonthAfter(today, day),
+          first_payment_date: firstDueAfter(today, day),
           ...(unreachable ? { payoff_by_note: "No monthly payment falls due before that date." } : {}),
         }
       : {}),
@@ -311,12 +225,4 @@ export function simulateRepayment(detail: LoanDetail, options: SimulationOptions
         }),
     balance_at_new_year: run.checkpoints.map((c) => ({ date: c.date, balance_kr: kr(c.balanceOre) })),
   };
-}
-
-/** First monthly due date strictly after `today`. */
-function dueDateInMonthAfter(today: string, day: number): string {
-  const year = Number(today.slice(0, 4));
-  const month = Number(today.slice(5, 7)) - 1;
-  const due = dueDateInMonth(year, month, day);
-  return due > today ? due : dueDateInMonth(month === 11 ? year + 1 : year, (month + 1) % 12, day);
 }

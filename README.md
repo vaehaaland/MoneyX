@@ -30,7 +30,7 @@ supabase db push
 |---|---|
 | `npm run dev` | Utviklingsserver |
 | `npm run build` | Produksjonsbygg |
-| `npm test` | Einingstestar for reknemotor, parsing, import, chat-verktøy og deling |
+| `npm test` | Einingstestar for reknemotor, planar, parsing, import, chat-verktøy og deling |
 | `npm run typecheck` | TypeScript |
 | `npm run lint` | ESLint |
 | `npm run db:types` | Genererer `lib/supabase/database.types.ts` frå det kopla prosjektet |
@@ -42,6 +42,7 @@ supabase db push
 | `lib/loan-engine` | Rein reknemotor: saldo, renter og hovudbok frå transaksjonar og satsar |
 | `lib/import` | Parsing og kolonnemapping for innlimte rader, CSV og Excel |
 | `lib/loans.ts` | Hentar lån frå Supabase og køyrer reknemotoren |
+| `lib/projection.ts`, `lib/plan.ts` | Framskriving frå saldoen i dag, nedbetalingsplanar og status mot plan |
 | `lib/sharing.ts` | Invitasjonslenker: token, hash og tolking av svar frå databasen |
 | `lib/chat` | Chat: leseverktøy for lån, simulering og samtale-løkka mot Claude |
 | `app/api/chat` | Server-rute som strøymer svaret til chat-skjermen |
@@ -49,6 +50,13 @@ supabase db push
 | `app/login`, `app/auth/confirm` | Innlogging med lenke på e-post |
 | `components` | UI-komponentar med Material 3-tokens (`app/globals.css`) |
 | `supabase/migrations` | Skjema og tilgangsreglar (RLS) |
+
+## Planar og påminningar
+
+Ein plan er eit fast månadsbeløp (eller ein måldato som appen reknar om til eit beløp), eventuelt med
+ekstra innbetalingar. Planar blir berre simulerte, frå den faktiske saldoen i dag. Planen du følgjer
+gir spørsmålet «Betalte du … ?» når ei betaling har forfalle utan å vere ført, og viser om du ligg
+føre eller bak. Varsel utanfor appen (push, e-post) er ikkje bygd.
 
 ## Deling
 

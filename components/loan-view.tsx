@@ -1,16 +1,18 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { markLoanSeen } from "@/app/(app)/sharing-actions";
 import { formatDate, formatKr, formatRate } from "@/lib/format";
 import { balanceLabel, CAPITALIZATION_LABELS, ENTRY_ICONS, ENTRY_LABELS } from "@/lib/labels";
 import type { LedgerEntryType } from "@/lib/loan-engine";
 import type { LoanDetail, LoanTransactionRow } from "@/lib/loans";
+import { simulatePlan } from "@/lib/plan";
 import { BalanceChart } from "./balance-chart";
 import { Icon } from "./icon";
+import { PlanReminder } from "./plan-reminder";
 import { TransactionSheet } from "./transaction-sheet";
-import { buttonClass, Card, Fab } from "./ui";
+import { Button, buttonClass, Card, Fab } from "./ui";
 
 interface Row {
   key: string;
@@ -98,7 +100,10 @@ function TimelineRow({ row, onEdit }: { row: Row; onEdit: ((tx: LoanTransactionR
 }
 
 export function LoanView({ detail }: { detail: LoanDetail }) {
-  const { loan, ledger, transactions, upcoming, recurring, today, people, newCount } = detail;
+  const { loan, ledger, transactions, upcoming, recurring, today, people, newCount, activePlan } = detail;
+  // Where the plan being followed leads from today's balance.
+  const planResult = useMemo(() => (activePlan ? simulatePlan(detail, activePlan.plan) : null), [detail, activePlan]);
+  const planPending = activePlan?.status.pending;
   const shared = people.length > 1;
   const activeRecurring = recurring.filter((rule) => rule.endDate === null || rule.nextDue <= rule.endDate);
   const [sheet, setSheet] = useState<{ open: boolean; editing: LoanTransactionRow | null }>({
@@ -178,6 +183,18 @@ export function LoanView({ detail }: { detail: LoanDetail }) {
         </p>
       </Card>
 
+      {loan.canWrite && planPending && !planPending.snoozed && (
+        <PlanReminder
+          loan={loan}
+          pending={planPending}
+          other={
+            <Button variant="outlined" onClick={() => setSheet({ open: true, editing: null })}>
+              Anna beløp
+            </Button>
+          }
+        />
+      )}
+
       {newCount > 0 && (
         <p role="status" className="rounded-3xl bg-tertiary-container px-5 py-3 text-sm text-on-tertiary-container">
           {newCount === 1 ? "Éin ny transaksjon" : `${newCount} nye transaksjonar`} sidan sist du var innom.
@@ -200,9 +217,39 @@ export function LoanView({ detail }: { detail: LoanDetail }) {
       {ledger.entries.length > 1 && (
         <Card className="px-3 pt-5 pb-3">
           <h2 className="px-2 pb-3 text-sm font-medium text-on-surface-variant">Saldo over tid</h2>
-          <BalanceChart series={ledger.series} />
+          <BalanceChart series={ledger.series} projection={planResult?.series} />
         </Card>
       )}
+
+      <Link
+        href={`/loans/${loan.id}/plan`}
+        className="state-layer flex items-center gap-4 rounded-[28px] bg-surface-low px-5 py-4"
+      >
+        <span className="flex size-10 shrink-0 items-center justify-center rounded-full bg-secondary-container text-on-secondary-container">
+          <Icon name="trend" className="size-5" />
+        </span>
+        <span className="min-w-0 flex-1">
+          <span className="block">Nedbetalingsplan</span>
+          <span className="block text-sm text-on-surface-variant">
+            {activePlan && planResult
+              ? [
+                  activePlan.plan.name,
+                  planResult.payoffDate ? `nedbetalt ${formatDate(planResult.payoffDate)}` : null,
+                  activePlan.status.aheadOre > 0
+                    ? `${formatKr(activePlan.status.aheadOre, { trimZeros: true })} føre planen`
+                    : activePlan.status.aheadOre < 0
+                      ? `${formatKr(-activePlan.status.aheadOre, { trimZeros: true })} bak planen`
+                      : "i rute",
+                ]
+                  .filter(Boolean)
+                  .join(" · ")
+              : detail.plans.length > 0
+                ? "Ingen plan blir følgd. Vel éin for å få påminningar."
+                : "Sjå når lånet er nedbetalt med ulike beløp"}
+          </span>
+        </span>
+        <Icon name="chevron" className="size-6 text-on-surface-variant" />
+      </Link>
 
       <Link
         href={`/loans/${loan.id}/share`}

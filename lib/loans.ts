@@ -1,5 +1,6 @@
 import "server-only";
 import { computeLedger, type Capitalization, type LedgerResult, type TransactionKind } from "./loan-engine";
+import { planStatus, type LoanPlan, type PlanAnswer, type PlanExtra, type PlanStatus } from "./plan";
 import { createClient } from "./supabase/server";
 import { todayIso } from "./format";
 
@@ -75,6 +76,10 @@ export interface LoanDetail {
   people: LoanPerson[];
   /** Transactions others have registered since the signed-in user last opened the loan. */
   newCount: number;
+  /** Repayment plans, oldest first. */
+  plans: LoanPlan[];
+  /** The plan progress is measured against, with where the loan stands on it. */
+  activePlan: { plan: LoanPlan; status: PlanStatus } | null;
 }
 
 const LOAN_COLUMNS = "id, owner_id, name, counterparty_name, direction, start_date, capitalization, archived_at";
@@ -82,6 +87,9 @@ const TX_COLUMNS = "id, loan_id, date, amount_ore, kind, note, recurring_id, cre
 const RECURRING_COLUMNS =
   "id, loan_id, kind, amount_ore, day_of_month, start_date, end_date, note, next_due";
 const RATE_COLUMNS = "id, loan_id, valid_from, annual_rate_bp";
+const PLAN_COLUMNS =
+  "id, loan_id, name, monthly_amount_ore, day_of_month, start_date, assumed_rate_bp, extra_payments, is_active";
+const ANSWER_COLUMNS = "plan_id, loan_id, due_date, status, snoozed_until";
 
 type LoanRecord = {
   id: string;
@@ -194,12 +202,58 @@ const toRate = (r: { id: string; valid_from: string; annual_rate_bp: number }): 
   annualRateBp: r.annual_rate_bp,
 });
 
+type PlanRecord = {
+  id: string;
+  loan_id: string;
+  name: string;
+  monthly_amount_ore: number;
+  day_of_month: number;
+  start_date: string;
+  assumed_rate_bp: number | null;
+  extra_payments: unknown;
+  is_active: boolean;
+};
+
+type AnswerRecord = { plan_id: string; loan_id: string; due_date: string; status: string; snoozed_until: string | null };
+
+/** Reads the stored one-off payments, dropping anything that is not a dated positive amount. */
+function toExtras(json: unknown): PlanExtra[] {
+  if (!Array.isArray(json)) return [];
+  return json
+    .flatMap((item): PlanExtra[] => {
+      const { date, amount_ore } = (item ?? {}) as { date?: unknown; amount_ore?: unknown };
+      const valid =
+        typeof date === "string" && /^\d{4}-\d{2}-\d{2}$/.test(date) && Number.isSafeInteger(amount_ore) && (amount_ore as number) > 0;
+      return valid ? [{ date: date as string, amountOre: amount_ore as number }] : [];
+    })
+    .sort((a, b) => a.date.localeCompare(b.date));
+}
+
+const toPlan = (p: PlanRecord): LoanPlan => ({
+  id: p.id,
+  name: p.name,
+  monthlyOre: p.monthly_amount_ore,
+  dayOfMonth: p.day_of_month,
+  startDate: p.start_date,
+  assumedRateBp: p.assumed_rate_bp,
+  extras: toExtras(p.extra_payments),
+  isActive: p.is_active,
+});
+
+const toAnswer = (a: AnswerRecord): PlanAnswer => ({
+  dueDate: a.due_date,
+  status: a.status as PlanAnswer["status"],
+  snoozedUntil: a.snoozed_until,
+});
+
 function buildDetail(
   loan: Loan,
   transactions: LoanTransactionRow[],
   rates: LoanRateRow[],
   recurring: RecurringPaymentRow[],
   people: LoanPerson[],
+  plans: PlanRecord[],
+  answers: AnswerRecord[],
   today: string,
 ): LoanDetail {
   const ledger = computeLedger({
@@ -208,7 +262,7 @@ function buildDetail(
     capitalization: loan.capitalization,
     until: today,
   });
-  return {
+  const detail: LoanDetail = {
     loan,
     transactions,
     rates,
@@ -218,7 +272,15 @@ function buildDetail(
     today,
     people,
     newCount: transactions.filter((t) => t.isNew).length,
+    plans: plans.map(toPlan),
+    activePlan: null,
   };
+  const active = detail.plans.find((plan) => plan.isActive);
+  if (active) {
+    const planAnswers = answers.filter((a) => a.plan_id === active.id).map(toAnswer);
+    detail.activePlan = { plan: active, status: planStatus(detail, active, planAnswers) };
+  }
+  return detail;
 }
 
 /** Every loan the signed-in user can see, with its current position. */
@@ -227,15 +289,18 @@ export async function listLoans(): Promise<LoanDetail[]> {
   const { data: claims } = await supabase.auth.getClaims();
   const userId = claims?.claims?.sub ?? null;
 
-  const [loans, transactions, rates, recurring, people, views] = await Promise.all([
+  const [loans, transactions, rates, recurring, people, views, plans, answers] = await Promise.all([
     supabase.from("loans").select(LOAN_COLUMNS).order("created_at"),
     supabase.from("loan_transactions").select(TX_COLUMNS).order("date").order("created_at"),
     supabase.from("loan_rates").select(RATE_COLUMNS).order("valid_from"),
     supabase.from("loan_recurring_payments").select(RECURRING_COLUMNS).order("created_at"),
     supabase.rpc("loan_people"),
     supabase.from("loan_views").select("loan_id, last_seen_at"),
+    supabase.from("loan_plans").select(PLAN_COLUMNS).order("created_at"),
+    supabase.from("loan_plan_occurrences").select(ANSWER_COLUMNS),
   ]);
-  const error = loans.error ?? transactions.error ?? rates.error ?? recurring.error ?? people.error ?? views.error;
+  const error =
+    loans.error ?? transactions.error ?? rates.error ?? recurring.error ?? people.error ?? views.error ?? plans.error ?? answers.error;
   if (error) throw new Error(error.message);
 
   const today = todayIso();
@@ -248,6 +313,8 @@ export async function listLoans(): Promise<LoanDetail[]> {
       (rates.data ?? []).filter((r) => r.loan_id === row.id).map(toRate),
       (recurring.data ?? []).filter((r) => r.loan_id === row.id).map(toRecurring),
       loanPeople,
+      (plans.data ?? []).filter((p) => p.loan_id === row.id),
+      (answers.data ?? []).filter((a) => a.loan_id === row.id),
       today,
     );
   });
@@ -260,15 +327,18 @@ export async function getLoan(id: string): Promise<LoanDetail | null> {
   const { data: claims } = await supabase.auth.getClaims();
   const userId = claims?.claims?.sub ?? null;
 
-  const [loan, transactions, rates, recurring, people, view] = await Promise.all([
+  const [loan, transactions, rates, recurring, people, view, plans, answers] = await Promise.all([
     supabase.from("loans").select(LOAN_COLUMNS).eq("id", id).maybeSingle(),
     supabase.from("loan_transactions").select(TX_COLUMNS).eq("loan_id", id).order("date").order("created_at"),
     supabase.from("loan_rates").select(RATE_COLUMNS).eq("loan_id", id).order("valid_from"),
     supabase.from("loan_recurring_payments").select(RECURRING_COLUMNS).eq("loan_id", id).order("created_at"),
     supabase.rpc("loan_people", { p_loan_id: id }),
     supabase.from("loan_views").select("last_seen_at").eq("loan_id", id).maybeSingle(),
+    supabase.from("loan_plans").select(PLAN_COLUMNS).eq("loan_id", id).order("created_at"),
+    supabase.from("loan_plan_occurrences").select(ANSWER_COLUMNS).eq("loan_id", id),
   ]);
-  const error = loan.error ?? transactions.error ?? rates.error ?? recurring.error ?? people.error ?? view.error;
+  const error =
+    loan.error ?? transactions.error ?? rates.error ?? recurring.error ?? people.error ?? view.error ?? plans.error ?? answers.error;
   if (error) throw new Error(error.message);
   if (!loan.data) return null;
 
@@ -280,6 +350,8 @@ export async function getLoan(id: string): Promise<LoanDetail | null> {
     (rates.data ?? []).map(toRate),
     (recurring.data ?? []).map(toRecurring),
     loanPeople,
+    plans.data ?? [],
+    answers.data ?? [],
     todayIso(),
   );
 }

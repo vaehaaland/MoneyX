@@ -29,7 +29,7 @@ export const TOOLS: Anthropic.Tool[] = [
   {
     name: "get_loan",
     description:
-      "Current position of one loan: balance split into principal and accrued interest, lifetime totals (disbursed, repaid, interest paid, fees), interest rate history, recurring payments and future-dated transactions.",
+      "Current position of one loan: balance split into principal and accrued interest, lifetime totals (disbursed, repaid, interest paid, fees), interest rate history, recurring payments, future-dated transactions, and the repayment plan being followed with how far ahead or behind the loan is.",
     eager_input_streaming: true,
     input_schema: {
       type: "object",

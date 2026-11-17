@@ -13,17 +13,23 @@ function compactKr(ore: number): string {
   return kr.toLocaleString("nb-NO", { maximumFractionDigits: 0 });
 }
 
-/** Balance over time: vertical steps where money moved, slopes where interest accrued. */
-export function BalanceChart({ series }: { series: { date: string; balanceOre: number }[] }) {
-  const data = series.map((point) => ({
-    time: Date.parse(`${point.date}T00:00:00Z`),
-    balanceOre: point.balanceOre,
-  }));
+type Point = { date: string; balanceOre: number };
+
+/**
+ * Balance over time: vertical steps where money moved, slopes where interest
+ * accrued. With `projection`, the planned balance continues as a dashed line.
+ */
+export function BalanceChart({ series, projection = [] }: { series: Point[]; projection?: Point[] }) {
+  const time = (date: string) => Date.parse(`${date}T00:00:00Z`);
+  const data: { time: number; balanceOre?: number; planOre?: number }[] = [
+    ...series.map((point) => ({ time: time(point.date), balanceOre: point.balanceOre })),
+    ...projection.map((point) => ({ time: time(point.date), planOre: point.balanceOre })),
+  ];
   const span = data[data.length - 1].time - data[0].time;
   const iso = (time: number) => new Date(time).toISOString().slice(0, 10);
 
   return (
-    <div className="h-52 w-full" role="img" aria-label="Saldo over tid">
+    <div className="h-52 w-full" role="img" aria-label={projection.length > 0 ? "Saldo over tid, med plan" : "Saldo over tid"}>
       <ResponsiveContainer width="100%" height="100%">
         <AreaChart data={data} margin={{ top: 8, right: 8, bottom: 0, left: 0 }}>
           <defs>
@@ -62,7 +68,10 @@ export function BalanceChart({ series }: { series: { date: string; balanceOre: n
               return (
                 <div className="rounded-xl bg-surface-highest px-3 py-2 text-sm shadow-fab">
                   <div className="text-on-surface-variant">{formatDate(iso(point.time))}</div>
-                  <div className="font-medium tabular-nums">{formatKr(point.balanceOre)}</div>
+                  <div className="font-medium tabular-nums">
+                    {formatKr(point.balanceOre ?? point.planOre)}
+                    {point.balanceOre === undefined && <span className="font-normal text-on-surface-variant"> · plan</span>}
+                  </div>
                 </div>
               );
             }}
@@ -76,6 +85,18 @@ export function BalanceChart({ series }: { series: { date: string; balanceOre: n
             isAnimationActive={false}
             activeDot={{ r: 5, stroke: "var(--md-surface-low)", strokeWidth: 2 }}
           />
+          {projection.length > 0 && (
+            <Area
+              type="linear"
+              dataKey="planOre"
+              stroke="var(--md-tertiary)"
+              strokeWidth={2}
+              strokeDasharray="6 5"
+              fill="none"
+              isAnimationActive={false}
+              activeDot={{ r: 5, stroke: "var(--md-surface-low)", strokeWidth: 2 }}
+            />
+          )}
         </AreaChart>
       </ResponsiveContainer>
     </div>

@@ -87,6 +87,94 @@ export type Database = {
           },
         ]
       }
+      loan_plan_occurrences: {
+        Row: {
+          due_date: string
+          loan_id: string
+          plan_id: string
+          snoozed_until: string | null
+          status: string
+          updated_at: string
+          updated_by: string | null
+        }
+        Insert: {
+          due_date: string
+          loan_id: string
+          plan_id: string
+          snoozed_until?: string | null
+          status: string
+          updated_at?: string
+          updated_by?: string | null
+        }
+        Update: {
+          due_date?: string
+          loan_id?: string
+          plan_id?: string
+          snoozed_until?: string | null
+          status?: string
+          updated_at?: string
+          updated_by?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "loan_plan_occurrences_plan_id_loan_id_fkey"
+            columns: ["plan_id", "loan_id"]
+            isOneToOne: false
+            referencedRelation: "loan_plans"
+            referencedColumns: ["id", "loan_id"]
+          },
+        ]
+      }
+      loan_plans: {
+        Row: {
+          assumed_rate_bp: number | null
+          created_at: string
+          created_by: string | null
+          day_of_month: number
+          extra_payments: Json
+          id: string
+          is_active: boolean
+          loan_id: string
+          monthly_amount_ore: number
+          name: string
+          start_date: string
+        }
+        Insert: {
+          assumed_rate_bp?: number | null
+          created_at?: string
+          created_by?: string | null
+          day_of_month: number
+          extra_payments?: Json
+          id?: string
+          is_active?: boolean
+          loan_id: string
+          monthly_amount_ore: number
+          name: string
+          start_date: string
+        }
+        Update: {
+          assumed_rate_bp?: number | null
+          created_at?: string
+          created_by?: string | null
+          day_of_month?: number
+          extra_payments?: Json
+          id?: string
+          is_active?: boolean
+          loan_id?: string
+          monthly_amount_ore?: number
+          name?: string
+          start_date?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "loan_plans_loan_id_fkey"
+            columns: ["loan_id"]
+            isOneToOne: false
+            referencedRelation: "loans"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       loan_rates: {
         Row: {
           annual_rate_bp: number
@@ -304,6 +392,10 @@ export type Database = {
         }[]
       }
       mark_loan_seen: { Args: { p_loan_id: string }; Returns: undefined }
+      set_active_loan_plan: {
+        Args: { p_loan_id: string; p_plan_id?: string }
+        Returns: undefined
+      }
       post_due_recurring_payments: {
         Args: { p_loan_id?: string }
         Returns: number

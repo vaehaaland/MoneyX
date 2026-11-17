@@ -94,22 +94,34 @@ loan_views          loan_id, user_id, last_seen_at
   transaksjonar den andre har ført sidan sist, og tidslinja merkjer dei med «Ny» og «Ført av …».
 - **Namn:** på kontosida kan ein setje namnet den andre ser i staden for e-postadressa.
 - **Forlat lånet:** ein medlem kan sjølv gje frå seg tilgangen.
-- Varsel på e-post og push høyrer til påminningane under og kjem i M4.
+- Varsel på e-post og push høyrer til påminningane under og er ikkje bygd (M4b).
 
 ### 3.5 Påminningar og låg friksjon
+
+Bygd i M4, inne i appen:
+
+- **Planlagd betaling:** når ei betaling i planen du følgjer har forfalle utan å vere ført, spør
+  appen «Betalte du 4 000 kr 15. nov.?» øvst på framsida og på lånet. Motparten får det same
+  spørsmålet spegelvendt («Fekk du …?»).
+  - *Ja* fører innbetalinga på forfallsdatoen med eitt trykk.
+  - *Anna beløp* opnar vanleg registrering.
+  - *Ikkje enno* spør att om 3 dagar.
+  - *Hopp over* stryk den betalinga frå planen.
+- Betalingar blir rekna mot planen som løpande sum, ikkje éin til éin: betaler du dobbelt éin
+  månad, dekkjer det neste, og det speler inga rolle kven som førte betalinga.
+- **Planlagt framover:** framsida viser kva som er planlagt dei neste fire månadene, ut og inn.
+
+Ikkje bygd, fordi det krev ein utsendingskanal som ikkje er sett opp:
 
 ```
 notification_prefs  user_id, loan_id, channel (push | email), planned_payment, new_activity,
                     monthly_summary
 ```
 
-- **Planlagd betaling:** på forfallsdagen kjem eit varsel – «Betalte du 4 000 kr i dag?» – med
-  *Ja* (registrerer transaksjonen med eitt trykk), *Anna beløp* og *Ikkje enno* (spør att om 3 dagar).
-- **Ny aktivitet:** når éin part registrerer noko, får den andre varsel. Begge held dermed lånet
-  oppdatert, og ingen blir overraska over saldoen.
-- **Månadsoppsummering:** saldo, betalt denne månaden og status mot plan, på e-post den 1.
-- **Stille for lenge:** ingen transaksjonar på 45 dagar og ingen aktiv plan → eitt vennleg dytt.
-- Kanalar: web-push der PWA-en er installert, e-post som reserve. Alt kan slåast av per lån.
+- Varsel utanfor appen (web-push der PWA-en er installert, e-post som reserve) for planlagd
+  betaling og ny aktivitet.
+- **Månadsoppsummering** på e-post den 1.
+- **Stille for lenge:** eitt dytt etter 45 dagar utan transaksjonar og utan plan.
 
 ### 3.6 Faste betalingar (bygd)
 
@@ -130,22 +142,27 @@ loan_transactions        + recurring_id
 - Ikkje bygd: endring av ein eksisterande regel (stopp og lag ny), andre intervall enn månadleg, og
   automatisk stopp når lånet er nedbetalt.
 
-## 4. Nedbetalingsplan
+## 4. Nedbetalingsplan (bygd i M4)
 
 ```
-loan_plans          id, loan_id, name, is_active, assumed_rate_bp (null = gjeldande sats)
-loan_plan_rules     id, plan_id, kind (recurring | one_off), amount_ore,
-                    start_date, end_date, day_of_month
+loan_plans             id, loan_id, name, monthly_amount_ore, day_of_month, start_date,
+                       assumed_rate_bp (null = lånet si eiga rente), extra_payments (jsonb),
+                       is_active
+loan_plan_occurrences  plan_id, loan_id, due_date, status (skipped | snoozed), snoozed_until
 ```
 
-- Ein plan er eit sett reglar: fast beløp per månad, og/eller eingongsbetalingar på gitte datoar.
+- Ein plan er eit fast beløp per månad frå ein startdato, og/eller eingongsbetalingar på gitte
+  datoar. Ein plan fører aldri noko sjølv; det gjer berre faste betalingar (3.6).
 - Motoren simulerer framover **frå faktisk saldo i dag**, så planen flyttar seg automatisk når ein
   verkeleg transaksjon avvik frå det planlagde.
-- Resultat: nedbetalt-dato, total rentekostnad, månadleg tabell, graf.
-- Omvendt utrekning: «kva må eg betale per månad for å vere ferdig innan dato X?»
-- Fleire planar per lån kan samanliknast side om side (t.d. 3 000 vs. 5 000 kr/md).
-- Avvik: tidslinja viser om du ligg føre eller bak aktiv plan.
-- Planlagde betalingar frå aktiv plan går inn i ei **framoverretta utgiftsoversikt** per månad.
+- Resultat: nedbetalt-dato, tal på betalingar, totalt å betale, rentekostnad og graf med planen som
+  stipla linje etter den faktiske saldoen.
+- Omvendt utrekning: «ferdig innan dato X» gir beløpet per månad.
+- Fleire planar per lån blir viste side om side. Éin kan følgjast om gongen.
+- Avvik: lånet viser kor mykje du ligg føre eller bak planen du følgjer.
+- I simuleringa erstattar planen dei faste innbetalingane på lånet. Framtidsdaterte transaksjonar
+  og faste uttak tel framleis med.
+- Ikkje bygd: endring av ein lagra plan (slett og lag ny) og månadleg tabell.
 
 ## 5. Transaksjonsimport og forbruksanalyse
 
@@ -207,7 +224,8 @@ import_profiles     id, owner_id, name, mapping_json           -- gjenbruk per b
 | M1 ✅ | Skjelett, innlogging, låneskjema, reknemotor m/testar, oversikt, tidslinje, ny transaksjon, rentesatsar, Excel-import av lånehistorikk | **Lånet er ute av Excel** |
 | M2 | Chat med leseverktøy (lån) | Spør Claude om lånet |
 | M3 | Invitasjonslenke, roller, spegelvend visning, merking av ny aktivitet i appen | Delt lån |
-| M4 | Planar, simulering, samanlikning, avvik, påminning med eitt-trykks stadfesting, varsel på e-post/push, månadsoppsummering | Dynamisk plan som minner deg på |
+| M4 | Planar, simulering, samanlikning, avvik, påminning i appen med eitt-trykks stadfesting, planlagt framover | Dynamisk plan som spør deg |
+| M4b | Varsel på push/e-post, månadsoppsummering, dytt ved stille (krev utsendingskanal) | Appen minner deg på utanfor appen |
 | M5 | Kontoar, CSV/XLSX-import, kategoriar, reglar, analyse | Forbruksanalyse |
 | M6 | Chat: forbruksverktøy og skriveverktøy med stadfesting | Claude jobbar på dataa |
 

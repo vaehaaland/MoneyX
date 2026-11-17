@@ -47,6 +47,8 @@ function detail(
     today: TODAY,
     people: [],
     newCount: 0,
+    plans: [],
+    activePlan: null,
   };
 }
 
