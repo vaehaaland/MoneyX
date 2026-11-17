@@ -34,6 +34,10 @@ export async function updateSession(request: NextRequest) {
   const { pathname } = request.nextUrl;
   const isPublic = PUBLIC_PATHS.some((p) => pathname === p || pathname.startsWith(`${p}/`));
 
+  // API callers expect a status code, not the login page.
+  if (!signedIn && pathname.startsWith("/api/")) {
+    return NextResponse.json({ error: "unauthorized" }, { status: 401 });
+  }
   if (!signedIn && !isPublic) return redirectTo(request, response, "/login");
   if (signedIn && pathname === "/login") return redirectTo(request, response, "/");
   return response;

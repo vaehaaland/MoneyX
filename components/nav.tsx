@@ -6,6 +6,7 @@ import { Icon, type IconName } from "./icon";
 
 const ITEMS: { href: string; label: string; icon: IconName; match: (path: string) => boolean }[] = [
   { href: "/", label: "Lån", icon: "bank", match: (p) => p === "/" || p.startsWith("/loans") },
+  { href: "/chat", label: "Spør", icon: "chat", match: (p) => p.startsWith("/chat") },
   { href: "/account", label: "Konto", icon: "person", match: (p) => p.startsWith("/account") },
 ];
 

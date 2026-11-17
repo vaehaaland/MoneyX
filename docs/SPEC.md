@@ -150,15 +150,17 @@ import_profiles     id, owner_id, name, mapping_json           -- gjenbruk per b
 ## 6. Claude-chat
 
 - Server-rute (`/api/chat`) med strøyming; API-nøkkelen ligg berre på serveren.
-- Tilgjengeleg som sidepanel på desktop og fullskjerm-ark på mobil, med konteksten til skjermen du
-  står på (t.d. gjeldande lån).
-- Verktøy:
+- Eigen skjerm («Spør») i hovudmenyen, og snarveg frå kvart lån som tek med lånet som kontekst.
+  Sidepanel på desktop kan kome seinare.
+- Samtalen ligg i nettlesarfana (per lån) og blir ikkje lagra i databasen.
+- Verktøy (dei fire første er bygde i M2):
 
 | Verktøy | Type | Gjer |
 |---|---|---|
-| `get_loan_summary` | les | Saldo, rente, sats, plan-status |
-| `list_loan_transactions` | les | Tidslinje med filter |
-| `simulate_plan` | les | Køyrer motoren med vilkårlege reglar/satsar |
+| `list_loans` | les | Alle lån med saldo, kven som skuldar kven og sats |
+| `get_loan` | les | Saldo delt i hovudstol og rente, totalar, satsar, faste betalingar |
+| `list_loan_transactions` | les | Tidslinje med filter på dato og type, med summar |
+| `simulate_repayment` | les | Køyrer motoren framover: fast månadsbeløp, måldato, anna rente, ekstra innbetalingar |
 | `query_spending` | les | Aggregert forbruk per kategori/periode |
 | `search_transactions` | les | Søk i importerte transaksjonar |
 | `propose_loan_transaction` | skriv | Lagar utkast – krev stadfesting |
