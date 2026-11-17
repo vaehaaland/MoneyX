@@ -26,6 +26,8 @@ export function loanOverview(detail: LoanDetail) {
     balance_kr: kr(ledger.balanceOre),
     annual_rate: formatRate(ledger.currentRateBp),
     archived: loan.archivedAt !== null,
+    your_access: loan.role,
+    shared_with: detail.people.filter((p) => !p.isMe).map((p) => p.name),
   };
 }
 
@@ -93,6 +95,8 @@ export function loanTimeline(detail: LoanDetail, filter: TimelineFilter = {}) {
       (!filter.types?.length || filter.types.includes(e.type)),
   );
   const ordered = filter.newestFirst === false ? matches : [...matches].reverse();
+  // Who registered each transaction, when it was someone other than the user.
+  const addedBy = new Map(detail.transactions.map((t) => [t.id, t.addedBy]));
   const sum = (type: LedgerEntryType) =>
     kr(matches.filter((e) => e.type === type).reduce((total, e) => total + Math.abs(e.deltaOre), 0));
 
@@ -118,6 +122,7 @@ export function loanTimeline(detail: LoanDetail, filter: TimelineFilter = {}) {
         ? { annual_rate: formatRate(e.annualRateBp) }
         : {}),
       ...(e.note ? { note: e.note } : {}),
+      ...(e.transactionId && addedBy.get(e.transactionId) ? { added_by: addedBy.get(e.transactionId) } : {}),
     })),
   };
 }

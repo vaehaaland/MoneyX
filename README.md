@@ -30,7 +30,7 @@ supabase db push
 |---|---|
 | `npm run dev` | Utviklingsserver |
 | `npm run build` | Produksjonsbygg |
-| `npm test` | Einingstestar for reknemotor, parsing, import og chat-verktøy |
+| `npm test` | Einingstestar for reknemotor, parsing, import, chat-verktøy og deling |
 | `npm run typecheck` | TypeScript |
 | `npm run lint` | ESLint |
 | `npm run db:types` | Genererer `lib/supabase/database.types.ts` frå det kopla prosjektet |
@@ -42,12 +42,20 @@ supabase db push
 | `lib/loan-engine` | Rein reknemotor: saldo, renter og hovudbok frå transaksjonar og satsar |
 | `lib/import` | Parsing og kolonnemapping for innlimte rader, CSV og Excel |
 | `lib/loans.ts` | Hentar lån frå Supabase og køyrer reknemotoren |
+| `lib/sharing.ts` | Invitasjonslenker: token, hash og tolking av svar frå databasen |
 | `lib/chat` | Chat: leseverktøy for lån, simulering og samtale-løkka mot Claude |
 | `app/api/chat` | Server-rute som strøymer svaret til chat-skjermen |
 | `app/(app)` | Innlogga sider og server actions |
 | `app/login`, `app/auth/confirm` | Innlogging med lenke på e-post |
 | `components` | UI-komponentar med Material 3-tokens (`app/globals.css`) |
 | `supabase/migrations` | Skjema og tilgangsreglar (RLS) |
+
+## Deling
+
+Eigaren lagar ei invitasjonslenke på «Deling» under lånet og sender ho sjølv. Den som opnar lenka og
+loggar inn, blir medlem med rolla lenka har (`editor` eller `viewer`). Lenka verkar éin gong, og
+berre ein hash av ho ligg i databasen. All tilgang blir handheva av RLS og funksjonane i
+`supabase/migrations/20261117100000_sharing.sql`.
 
 ## Chat
 

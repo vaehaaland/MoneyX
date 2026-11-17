@@ -71,11 +71,32 @@ hendingar.
 - **Tidslinje:** alle transaksjonar og rentehendingar med løpande saldo. Filtrer på type.
 - **Ny transaksjon:** FAB → botnark med beløp, dato, type, notat. Tre trykk frå opna app.
 - **Rente:** liste over satsar med gyldig-frå-dato, legg til ny.
-- **Deling:** inviter motparten på e-post, vel lese- eller skrivetilgang.
+- **Deling:** lag invitasjonslenke til motparten, vel lese- eller skrivetilgang (sjå 3.4).
 - **Import frå Excel:** lim inn eller last opp eksisterande reknark, map kolonnar (dato, beløp,
   tekst), førehandsvis saldo før lagring.
 
-### 3.4 Påminningar og låg friksjon
+### 3.4 Deling med motparten (bygd i M3)
+
+```
+loan_invites        id, loan_id, role (viewer | editor), token_hash, created_by, created_at,
+                    expires_at, accepted_by, accepted_at
+loan_views          loan_id, user_id, last_seen_at
+```
+
+- **Invitasjonslenke, ikkje e-post:** eigaren lagar ei lenke og sender ho sjølv. Lenka verkar éin
+  gong og i 14 dagar, og kan trekkjast tilbake. Berre ein hash av lenka blir lagra, så ho blir vist
+  éin gong. Appen sender ingen e-post, så deling fungerer utan eigen SMTP.
+- **Roller:** `editor` kan føre og endre transaksjonar, renter og faste betalingar. `viewer` kan
+  berre sjå. Berre eigaren kan endre lånet, slette det, invitere og fjerne folk.
+- **Kvar si side:** lånet er lagra frå eigaren si side. Motparten ser det spegelvendt: «du skuldar»
+  hos den eine er «skuldar deg» hos den andre.
+- **Ny aktivitet:** kvar brukar har eit «sist sett»-merke per lån. Låneoversikta viser kor mange
+  transaksjonar den andre har ført sidan sist, og tidslinja merkjer dei med «Ny» og «Ført av …».
+- **Namn:** på kontosida kan ein setje namnet den andre ser i staden for e-postadressa.
+- **Forlat lånet:** ein medlem kan sjølv gje frå seg tilgangen.
+- Varsel på e-post og push høyrer til påminningane under og kjem i M4.
+
+### 3.5 Påminningar og låg friksjon
 
 ```
 notification_prefs  user_id, loan_id, channel (push | email), planned_payment, new_activity,
@@ -90,7 +111,7 @@ notification_prefs  user_id, loan_id, channel (push | email), planned_payment, n
 - **Stille for lenge:** ingen transaksjonar på 45 dagar og ingen aktiv plan → eitt vennleg dytt.
 - Kanalar: web-push der PWA-en er installert, e-post som reserve. Alt kan slåast av per lån.
 
-### 3.5 Faste betalingar (bygd)
+### 3.6 Faste betalingar (bygd)
 
 ```
 loan_recurring_payments  id, loan_id, kind (repayment | disbursement), amount_ore,
@@ -104,7 +125,7 @@ loan_transactions        + recurring_id
 - Startdato tilbake i tid fører alle forfalne betalingar med ein gong.
 - Kvar regel fører maksimalt éin transaksjon per dato, og ei betaling som blir sletta manuelt kjem
   ikkje tilbake. Å stoppe ein regel fjernar ikkje det som alt er ført.
-- Betalingane blir førte utan stadfesting. Påminninga i 3.4 («Betalte du … i dag?») er alternativet
+- Betalingane blir førte utan stadfesting. Påminninga i 3.5 («Betalte du … i dag?») er alternativet
   for betalingar som ikkje alltid går som planlagt.
 - Ikkje bygd: endring av ein eksisterande regel (stopp og lag ny), andre intervall enn månadleg, og
   automatisk stopp når lånet er nedbetalt.
@@ -185,8 +206,8 @@ import_profiles     id, owner_id, name, mapping_json           -- gjenbruk per b
 |---|---|---|
 | M1 ✅ | Skjelett, innlogging, låneskjema, reknemotor m/testar, oversikt, tidslinje, ny transaksjon, rentesatsar, Excel-import av lånehistorikk | **Lånet er ute av Excel** |
 | M2 | Chat med leseverktøy (lån) | Spør Claude om lånet |
-| M3 | Invitasjon av motparten med skrivetilgang, varsel om ny aktivitet | Delt lån |
-| M4 | Planar, simulering, samanlikning, avvik, påminning med eitt-trykks stadfesting, månadsoppsummering | Dynamisk plan som minner deg på |
+| M3 | Invitasjonslenke, roller, spegelvend visning, merking av ny aktivitet i appen | Delt lån |
+| M4 | Planar, simulering, samanlikning, avvik, påminning med eitt-trykks stadfesting, varsel på e-post/push, månadsoppsummering | Dynamisk plan som minner deg på |
 | M5 | Kontoar, CSV/XLSX-import, kategoriar, reglar, analyse | Forbruksanalyse |
 | M6 | Chat: forbruksverktøy og skriveverktøy med stadfesting | Claude jobbar på dataa |
 

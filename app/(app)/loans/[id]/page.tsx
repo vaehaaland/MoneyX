@@ -19,9 +19,9 @@ export default async function LoanPage({ params }: PageProps<"/loans/[id]">) {
         actions={
           <>
             <IconLink href={`/chat?loan=${loan.id}`} icon="chat" label="Spør om lånet" />
-            <IconLink href={`/loans/${loan.id}/rates`} icon="percent" label="Rente" />
-            <IconLink href={`/loans/${loan.id}/import`} icon="upload" label="Importer" />
-            <IconLink href={`/loans/${loan.id}/settings`} icon="tune" label="Innstillingar" />
+            {loan.canWrite && <IconLink href={`/loans/${loan.id}/rates`} icon="percent" label="Rente" />}
+            {loan.canWrite && <IconLink href={`/loans/${loan.id}/import`} icon="upload" label="Importer" />}
+            {loan.isOwner && <IconLink href={`/loans/${loan.id}/settings`} icon="tune" label="Innstillingar" />}
           </>
         }
       />

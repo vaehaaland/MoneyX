@@ -14,6 +14,50 @@ export type Database = {
   }
   public: {
     Tables: {
+      loan_invites: {
+        Row: {
+          accepted_at: string | null
+          accepted_by: string | null
+          created_at: string
+          created_by: string | null
+          expires_at: string
+          id: string
+          loan_id: string
+          role: string
+          token_hash: string
+        }
+        Insert: {
+          accepted_at?: string | null
+          accepted_by?: string | null
+          created_at?: string
+          created_by?: string | null
+          expires_at?: string
+          id?: string
+          loan_id: string
+          role?: string
+          token_hash: string
+        }
+        Update: {
+          accepted_at?: string | null
+          accepted_by?: string | null
+          created_at?: string
+          created_by?: string | null
+          expires_at?: string
+          id?: string
+          loan_id?: string
+          role?: string
+          token_hash?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "loan_invites_loan_id_fkey"
+            columns: ["loan_id"]
+            isOneToOne: false
+            referencedRelation: "loans"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       loan_members: {
         Row: {
           created_at: string
@@ -176,6 +220,32 @@ export type Database = {
           },
         ]
       }
+      loan_views: {
+        Row: {
+          last_seen_at: string
+          loan_id: string
+          user_id: string
+        }
+        Insert: {
+          last_seen_at?: string
+          loan_id: string
+          user_id?: string
+        }
+        Update: {
+          last_seen_at?: string
+          loan_id?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "loan_views_loan_id_fkey"
+            columns: ["loan_id"]
+            isOneToOne: false
+            referencedRelation: "loans"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       loans: {
         Row: {
           archived_at: string | null
@@ -220,6 +290,20 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      accept_loan_invite: { Args: { p_token: string }; Returns: Json }
+      loan_invite_preview: { Args: { p_token: string }; Returns: Json }
+      loan_people: {
+        Args: { p_loan_id?: string }
+        Returns: {
+          display_name: string
+          email: string
+          joined_at: string
+          loan_id: string
+          role: string
+          user_id: string
+        }[]
+      }
+      mark_loan_seen: { Args: { p_loan_id: string }; Returns: undefined }
       post_due_recurring_payments: {
         Args: { p_loan_id?: string }
         Returns: number

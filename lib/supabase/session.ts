@@ -38,15 +38,19 @@ export async function updateSession(request: NextRequest) {
   if (!signedIn && pathname.startsWith("/api/")) {
     return NextResponse.json({ error: "unauthorized" }, { status: 401 });
   }
-  if (!signedIn && !isPublic) return redirectTo(request, response, "/login");
+  if (!signedIn && !isPublic) {
+    // Remember where they were going, e.g. an invite link.
+    const next = pathname === "/" ? "" : `?next=${encodeURIComponent(pathname + request.nextUrl.search)}`;
+    return redirectTo(request, response, "/login", next);
+  }
   if (signedIn && pathname === "/login") return redirectTo(request, response, "/");
   return response;
 }
 
-function redirectTo(request: NextRequest, from: NextResponse, pathname: string) {
+function redirectTo(request: NextRequest, from: NextResponse, pathname: string, search = "") {
   const url = request.nextUrl.clone();
   url.pathname = pathname;
-  url.search = "";
+  url.search = search;
   const redirect = NextResponse.redirect(url);
   from.cookies.getAll().forEach((cookie) => redirect.cookies.set(cookie));
   for (const header of ["cache-control", "expires", "pragma"]) {

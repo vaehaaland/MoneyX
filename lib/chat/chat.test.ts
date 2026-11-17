@@ -15,6 +15,8 @@ const tx = (date: string, kind: LoanTransactionRow["kind"], kroner: number, note
   amountOre: ore(kroner),
   note,
   recurring: false,
+  addedBy: null,
+  isNew: false,
 });
 
 /** Builds a `LoanDetail` the same way `lib/loans` does. */
@@ -34,6 +36,8 @@ function detail(
       capitalization,
       archivedAt: null,
       isOwner: true,
+      role: "owner",
+      canWrite: true,
     },
     transactions,
     rates,
@@ -41,6 +45,8 @@ function detail(
     ledger: computeLedger({ transactions, rates, capitalization, until: TODAY }),
     upcoming: transactions.filter((t) => t.date > TODAY),
     today: TODAY,
+    people: [],
+    newCount: 0,
   };
 }
 

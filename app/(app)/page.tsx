@@ -36,7 +36,7 @@ export default async function LoansPage() {
             </Link>
           </Card>
         )}
-        {loans.map(({ loan, ledger, transactions }) => (
+        {loans.map(({ loan, ledger, transactions, people, newCount }) => (
           <Link key={loan.id} href={`/loans/${loan.id}`} className="state-layer block rounded-[28px] bg-surface-low p-5">
             <div className="flex items-start justify-between gap-4">
               <div className="min-w-0">
@@ -45,7 +45,13 @@ export default async function LoansPage() {
                   {balanceLabel(loan.direction, loan.counterpartyName, ledger.balanceOre)}
                 </p>
               </div>
-              <Icon name="chevron" className="mt-1 size-6 text-on-surface-variant" />
+              {newCount > 0 ? (
+                <span className="mt-0.5 shrink-0 rounded-full bg-tertiary-container px-3 py-1 text-sm font-medium text-on-tertiary-container">
+                  {newCount} {newCount === 1 ? "ny" : "nye"}
+                </span>
+              ) : (
+                <Icon name="chevron" className="mt-1 size-6 text-on-surface-variant" />
+              )}
             </div>
             <p className="mt-4 text-3xl font-medium tracking-tight tabular-nums">
               {formatKr(Math.abs(ledger.balanceOre), { trimZeros: true })}
@@ -53,6 +59,7 @@ export default async function LoansPage() {
             <p className="mt-1 text-sm text-on-surface-variant">
               {ledger.currentRateBp > 0 ? `${formatRate(ledger.currentRateBp)} rente` : "Rentefritt"} ·{" "}
               {transactions.length} {transactions.length === 1 ? "transaksjon" : "transaksjonar"}
+              {people.length > 1 && " · delt"}
             </p>
           </Link>
         ))}

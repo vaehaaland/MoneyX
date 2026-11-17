@@ -1,7 +1,8 @@
 "use client";
 
 import Link from "next/link";
-import { useState } from "react";
+import { useEffect, useState } from "react";
+import { markLoanSeen } from "@/app/(app)/sharing-actions";
 import { formatDate, formatKr, formatRate } from "@/lib/format";
 import { balanceLabel, CAPITALIZATION_LABELS, ENTRY_ICONS, ENTRY_LABELS } from "@/lib/labels";
 import type { LedgerEntryType } from "@/lib/loan-engine";
@@ -21,6 +22,8 @@ interface Row {
   deltaOre: number | null;
   balanceAfterOre: number | null;
   transaction: LoanTransactionRow | null;
+  /** Added by the other party since the last visit. */
+  isNew: boolean;
 }
 
 function Stat({ label, value }: { label: string; value: string }) {
@@ -32,7 +35,7 @@ function Stat({ label, value }: { label: string; value: string }) {
   );
 }
 
-function TimelineRow({ row, onEdit }: { row: Row; onEdit: (tx: LoanTransactionRow) => void }) {
+function TimelineRow({ row, onEdit }: { row: Row; onEdit: ((tx: LoanTransactionRow) => void) | null }) {
   const reduces = row.deltaOre !== null && row.deltaOre < 0;
   const content = (
     <>
@@ -48,8 +51,15 @@ function TimelineRow({ row, onEdit }: { row: Row; onEdit: (tx: LoanTransactionRo
         <Icon name={ENTRY_ICONS[row.type]} className="size-5" />
       </span>
       <span className="min-w-0 flex-1 text-left">
-        <span className="block truncate">{row.title}</span>
-        <span className="block truncate text-sm text-on-surface-variant">
+        <span className="flex items-center gap-2">
+          <span className="truncate">{row.title}</span>
+          {row.isNew && (
+            <span className="shrink-0 rounded-full bg-tertiary-container px-2 py-0.5 text-xs font-medium text-on-tertiary-container">
+              Ny
+            </span>
+          )}
+        </span>
+        <span className="line-clamp-2 text-sm text-on-surface-variant">
           {formatDate(row.date)}
           {row.detail ? ` · ${row.detail}` : ""}
         </span>
@@ -71,7 +81,7 @@ function TimelineRow({ row, onEdit }: { row: Row; onEdit: (tx: LoanTransactionRo
   const className = "flex w-full items-center gap-4 px-4 py-3";
   return (
     <li>
-      {row.transaction ? (
+      {row.transaction && onEdit ? (
         <button
           type="button"
           className={`state-layer ${className}`}
@@ -88,12 +98,18 @@ function TimelineRow({ row, onEdit }: { row: Row; onEdit: (tx: LoanTransactionRo
 }
 
 export function LoanView({ detail }: { detail: LoanDetail }) {
-  const { loan, ledger, transactions, upcoming, recurring, today } = detail;
+  const { loan, ledger, transactions, upcoming, recurring, today, people, newCount } = detail;
+  const shared = people.length > 1;
   const activeRecurring = recurring.filter((rule) => rule.endDate === null || rule.nextDue <= rule.endDate);
   const [sheet, setSheet] = useState<{ open: boolean; editing: LoanTransactionRow | null }>({
     open: false,
     editing: null,
   });
+
+  // Opening the loan is what marks the other party's entries as seen.
+  useEffect(() => {
+    void markLoanSeen(loan.id);
+  }, [loan.id]);
 
   const byId = new Map(transactions.map((t) => [t.id, t]));
   const rows: Row[] = ledger.entries
@@ -111,6 +127,7 @@ export function LoanView({ detail }: { detail: LoanDetail }) {
         detailText = detailText ? `${detailText} · ${split}` : split;
       }
       if (transaction?.recurring) detailText = detailText ? `Fast · ${detailText}` : "Fast betaling";
+      if (transaction?.addedBy) detailText = [detailText, `Ført av ${transaction.addedBy}`].filter(Boolean).join(" · ");
       return {
         key: entry.transactionId ?? `${entry.type}-${entry.date}-${index}`,
         date: entry.date,
@@ -120,6 +137,7 @@ export function LoanView({ detail }: { detail: LoanDetail }) {
         deltaOre,
         balanceAfterOre: entry.type === "rate_change" ? null : entry.balanceAfterOre,
         transaction,
+        isNew: transaction?.isNew ?? false,
       };
     })
     .reverse();
@@ -129,16 +147,19 @@ export function LoanView({ detail }: { detail: LoanDetail }) {
     date: t.date,
     type: t.kind,
     title: ENTRY_LABELS[t.kind],
-    detail: t.note,
+    detail: [t.note, t.addedBy ? `Ført av ${t.addedBy}` : null].filter(Boolean).join(" · ") || null,
     deltaOre: t.kind === "repayment" ? -t.amountOre : t.amountOre,
     balanceAfterOre: null,
     transaction: t,
+    isNew: t.isNew,
   }));
 
   const hasInterest = ledger.currentRateBp > 0 || ledger.totals.paidInterestOre > 0 ||
     ledger.totals.capitalizedInterestOre > 0 || ledger.accruedInterestOre > 0;
   const empty = transactions.length === 0;
-  const edit = (tx: LoanTransactionRow) => setSheet({ open: true, editing: tx });
+  // Viewers get a read-only timeline.
+  const edit = loan.canWrite ? (tx: LoanTransactionRow) => setSheet({ open: true, editing: tx }) : null;
+  const others = people.filter((p) => !p.isMe);
 
   return (
     <div className="animate-enter space-y-4 px-4 pb-28">
@@ -156,6 +177,12 @@ export function LoanView({ detail }: { detail: LoanDetail }) {
           )}
         </p>
       </Card>
+
+      {newCount > 0 && (
+        <p role="status" className="rounded-3xl bg-tertiary-container px-5 py-3 text-sm text-on-tertiary-container">
+          {newCount === 1 ? "Éin ny transaksjon" : `${newCount} nye transaksjonar`} sidan sist du var innom.
+        </p>
+      )}
 
       {!empty && (
         <div className={`grid gap-3 ${hasInterest ? "grid-cols-2 sm:grid-cols-3" : "grid-cols-2"}`}>
@@ -176,6 +203,24 @@ export function LoanView({ detail }: { detail: LoanDetail }) {
           <BalanceChart series={ledger.series} />
         </Card>
       )}
+
+      <Link
+        href={`/loans/${loan.id}/share`}
+        className="state-layer flex items-center gap-4 rounded-[28px] bg-surface-low px-5 py-4"
+      >
+        <span className="flex size-10 shrink-0 items-center justify-center rounded-full bg-secondary-container text-on-secondary-container">
+          <Icon name="group" className="size-5" />
+        </span>
+        <span className="min-w-0 flex-1">
+          <span className="block">{shared ? "Delt lån" : "Del lånet"}</span>
+          <span className="block truncate text-sm text-on-surface-variant">
+            {shared
+              ? `Med ${others.map((p) => p.name).join(", ")}${loan.canWrite ? "" : " · du kan berre sjå"}`
+              : "Inviter den andre parten, så held de lånet oppdatert saman"}
+          </span>
+        </span>
+        <Icon name="chevron" className="size-6 text-on-surface-variant" />
+      </Link>
 
       <Link
         href={`/loans/${loan.id}/recurring`}
@@ -202,9 +247,11 @@ export function LoanView({ detail }: { detail: LoanDetail }) {
         <Card className="space-y-4 py-10 text-center">
           <h2 className="text-xl">Ingen transaksjonar enno</h2>
           <p className="mx-auto max-w-sm text-on-surface-variant">
-            Legg inn det første uttaket, eller hent heile historikken frå reknearket ditt.
+            {loan.canWrite
+              ? "Legg inn det første uttaket, eller hent heile historikken frå reknearket ditt."
+              : "Her dukkar transaksjonane opp når dei blir lagde inn."}
           </p>
-          <div className="flex flex-wrap justify-center gap-3">
+          <div className={`flex flex-wrap justify-center gap-3 ${loan.canWrite ? "" : "hidden"}`}>
             <Link href={`/loans/${loan.id}/import`} className={buttonClass("tonal")}>
               <Icon name="upload" className="size-5 -ml-1" />
               Importer frå Excel
@@ -243,17 +290,21 @@ export function LoanView({ detail }: { detail: LoanDetail }) {
         </>
       )}
 
-      <Fab icon="add" onClick={() => setSheet({ open: true, editing: null })}>
-        Ny transaksjon
-      </Fab>
-      <TransactionSheet
-        open={sheet.open}
-        onClose={() => setSheet((current) => ({ ...current, open: false }))}
-        loanId={loan.id}
-        editing={sheet.editing}
-        defaultKind={empty ? "disbursement" : "repayment"}
-        today={today}
-      />
+      {loan.canWrite && (
+        <>
+          <Fab icon="add" onClick={() => setSheet({ open: true, editing: null })}>
+            Ny transaksjon
+          </Fab>
+          <TransactionSheet
+            open={sheet.open}
+            onClose={() => setSheet((current) => ({ ...current, open: false }))}
+            loanId={loan.id}
+            editing={sheet.editing}
+            defaultKind={empty ? "disbursement" : "repayment"}
+            today={today}
+          />
+        </>
+      )}
     </div>
   );
 }

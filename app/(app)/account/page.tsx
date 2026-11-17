@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { signOut } from "@/app/(app)/actions";
 import { Icon } from "@/components/icon";
+import { NameForm } from "@/components/name-form";
 import { buttonClass, Card, TopBar } from "@/components/ui";
 import { createClient } from "@/lib/supabase/server";
 
@@ -10,8 +11,10 @@ export const metadata: Metadata = { title: "Konto" };
 
 export default async function AccountPage() {
   const supabase = await createClient();
-  const { data } = await supabase.auth.getClaims();
-  const email = typeof data?.claims?.email === "string" ? data.claims.email : null;
+  // Asks the auth server rather than the session token, so a name saved a moment ago shows up.
+  const { data } = await supabase.auth.getUser();
+  const email = data.user?.email ?? null;
+  const name = typeof data.user?.user_metadata?.name === "string" ? data.user.user_metadata.name : "";
 
   return (
     <>
@@ -26,6 +29,9 @@ export default async function AccountPage() {
               Logg ut
             </button>
           </form>
+        </Card>
+        <Card>
+          <NameForm initialName={name} />
         </Card>
       </div>
     </>

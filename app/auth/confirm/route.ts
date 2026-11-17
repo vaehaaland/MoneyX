@@ -1,5 +1,6 @@
 import type { EmailOtpType } from "@supabase/supabase-js";
 import { NextResponse, type NextRequest } from "next/server";
+import { NEXT_COOKIE, safeNextPath } from "@/lib/next-path";
 import { createClient } from "@/lib/supabase/server";
 
 const OTP_TYPES: EmailOtpType[] = ["email", "magiclink", "signup", "invite"];
@@ -21,9 +22,11 @@ export async function GET(request: NextRequest) {
     signedIn = !error;
   }
 
-  const url = request.nextUrl.clone();
-  url.search = "";
-  url.pathname = signedIn ? "/" : "/login";
+  // Continue to where the visitor was headed when they asked for the link.
+  const next = safeNextPath(request.cookies.get(NEXT_COOKIE)?.value);
+  const url = new URL(signedIn ? next : "/login", request.nextUrl.origin);
   if (!signedIn) url.searchParams.set("error", "link");
-  return NextResponse.redirect(url);
+  const response = NextResponse.redirect(url);
+  if (signedIn) response.cookies.delete(NEXT_COOKIE);
+  return response;
 }

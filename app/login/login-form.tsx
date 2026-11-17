@@ -6,7 +6,10 @@ import { Button, ErrorText, Field } from "@/components/ui";
 import { sendCode, verifyCode } from "./actions";
 
 export function LoginForm() {
-  const linkFailed = useSearchParams().get("error") === "link";
+  const searchParams = useSearchParams();
+  const linkFailed = searchParams.get("error") === "link";
+  // Where the visitor was headed before being asked to sign in, e.g. an invite link.
+  const next = searchParams.get("next") ?? undefined;
   const [step, setStep] = useState<"email" | "code">("email");
   const [email, setEmail] = useState("");
   const [code, setCode] = useState("");
@@ -18,7 +21,7 @@ export function LoginForm() {
   const send = () =>
     startTransition(async () => {
       setError(null);
-      const result = await sendCode(email);
+      const result = await sendCode(email, next);
       if (result.ok) setStep("code");
       else setError(result.error);
     });
@@ -26,7 +29,7 @@ export function LoginForm() {
   const verify = () =>
     startTransition(async () => {
       setError(null);
-      const result = await verifyCode(email, code);
+      const result = await verifyCode(email, code, next);
       if (!result.ok) setError(result.error);
     });
 
@@ -50,6 +53,11 @@ export function LoginForm() {
           onChange={(event) => setEmail(event.target.value)}
           hint="Du får ei innloggingslenke på e-post. Ingen passord."
         />
+        {next?.startsWith("/invite/") && (
+          <p className="rounded-2xl bg-secondary-container px-4 py-3 text-sm text-on-secondary-container">
+            Du er invitert til eit lån. Logg inn, så kjem du rett til invitasjonen.
+          </p>
+        )}
         <ErrorText>{error}</ErrorText>
         <Button type="submit" disabled={pending} className="w-full">
           {pending ? "Sender…" : "Send innlogging"}
